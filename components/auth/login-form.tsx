@@ -3,7 +3,6 @@
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import { Hexagon } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { login } from "@/app/actions/auth";
@@ -103,9 +102,19 @@ export function LoginForm() {
             <div className="h-px flex-1 bg-border" />
           </div>
 
-          <Button variant="outline" className="h-10 w-full py-2" type="button">
+          <a
+            href="/register"
+            className="inline-flex h-10 w-full items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          >
             Create account
-          </Button>
+          </a>
+
+          <p className="text-center text-[12px] text-[#a3a3a3]">
+            Administrator?{" "}
+            <a href="/admin/login" className="text-[#737373] hover:underline">
+              Admin login →
+            </a>
+          </p>
         </form>
       </div>
     </div>

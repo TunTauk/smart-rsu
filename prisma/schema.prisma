@@ -28,6 +28,7 @@ model students {
   updated_at                   DateTime                       @updatedAt
   recommendation_conversations recommendation_conversations[]
   registration_reminders       registration_reminders[]
+  current_enrollments          student_current_enrollments[]
   course_histories             student_course_histories[]
   preference_answers           student_preference_answers[]
   recommendations              student_recommendations[]
@@ -73,6 +74,7 @@ model subjects {
   major_subjects     major_subjects[]
   semester_subjects  semester_subjects[]
   course_histories   student_course_histories[]
+  current_courses    student_current_enrolled_courses[]
   prerequisite       subjects?                  @relation("subject_prerequisite", fields: [prerequisite_id], references: [id])
   dependent_subjects subjects[]                 @relation("subject_prerequisite")
 
@@ -97,6 +99,7 @@ model semester_schedules {
   major_id               Int
   registration_date      DateTime
   registration_reminders registration_reminders[]
+  current_enrollments    student_current_enrollments[]
   major                  majors                    @relation(fields: [major_id], references: [id], onDelete: Cascade)
   semester_subjects      semester_subjects[]
   student_recommendation student_recommendations[]
@@ -129,6 +132,7 @@ model semester_sections {
   semester_subject        semester_subjects                 @relation(fields: [semester_subject_id], references: [id], onDelete: Cascade)
   recommendation_subjects student_recommendation_subjects[]
   saved_plan_subjects     student_saved_plan_subjects[]
+  current_courses         student_current_enrolled_courses[]
 
   @@unique([semester_subject_id, code])
 }
@@ -139,9 +143,47 @@ model semester_section_meetings {
   day_of_week         DayOfWeek
   start_time          String
   end_time            String
+  room                String?
   semester_section    semester_sections @relation(fields: [semester_section_id], references: [id], onDelete: Cascade)
 
   @@index([semester_section_id], map: "semester_section_meetings_semester_section_id_fkey")
+}
+
+model student_current_enrollments {
+  id                   Int                                @id @default(autoincrement())
+  student_id           Int
+  semester_schedule_id Int?
+  created_at           DateTime                           @default(now())
+  updated_at           DateTime                           @updatedAt
+  current_courses      student_current_enrolled_courses[]
+  semester_schedule    semester_schedules?                @relation(fields: [semester_schedule_id], references: [id], onDelete: SetNull)
+  student              students                           @relation(fields: [student_id], references: [id], onDelete: Cascade)
+
+  @@index([semester_schedule_id], map: "student_current_enrollments_semester_schedule_id_fkey")
+  @@index([student_id], map: "student_current_enrollments_student_id_fkey")
+}
+
+model student_current_enrolled_courses {
+  id                            Int                         @id @default(autoincrement())
+  student_current_enrollment_id Int
+  subject_id                    Int?
+  semester_section_id           Int?
+  subject_code                  String
+  subject_name                  String
+  lecture_section               String?
+  room                          String?
+  day_of_week                   DayOfWeek
+  start_time                    String
+  end_time                      String
+  created_at                    DateTime                    @default(now())
+  updated_at                    DateTime                    @updatedAt
+  semester_section              semester_sections?          @relation(fields: [semester_section_id], references: [id], onDelete: SetNull)
+  student_current_enrollment    student_current_enrollments @relation(fields: [student_current_enrollment_id], references: [id], onDelete: Cascade)
+  subject                       subjects?                   @relation(fields: [subject_id], references: [id], onDelete: SetNull)
+
+  @@index([semester_section_id], map: "student_current_enrolled_courses_semester_section_id_fkey")
+  @@index([student_current_enrollment_id], map: "student_current_enrolled_courses_enrollment_id_fkey")
+  @@index([subject_id], map: "student_current_enrolled_courses_subject_id_fkey")
 }
 
 model semester_section_instructors {
@@ -222,7 +264,7 @@ model recommendation_messages {
   id              Int                          @id @default(autoincrement())
   conversation_id Int
   role            RecommendationMessageRole
-  content         String
+  content         String                       @db.Text
   created_at      DateTime                     @default(now())
   conversation    recommendation_conversations @relation(fields: [conversation_id], references: [id], onDelete: Cascade)
 
@@ -248,6 +290,7 @@ model student_recommendation_subjects {
   student_recommendation_id Int
   semester_subject_id       Int
   semester_section_id       Int
+  reason                    String?                 @db.Text
   semester_section          semester_sections       @relation(fields: [semester_section_id], references: [id], onDelete: Cascade)
   semester_subject          semester_subjects       @relation(fields: [semester_subject_id], references: [id], onDelete: Cascade)
   student_recommendation    student_recommendations @relation(fields: [student_recommendation_id], references: [id], onDelete: Cascade)
@@ -304,6 +347,7 @@ model registration_reminders {
 enum UserRole {
   STUDENT    @map("student")
   INSTRUCTOR @map("instructor")
+  ADMIN      @map("admin")
 }
 
 enum PreferenceUserType {

@@ -1,246 +1,216 @@
-import { Sparkles, TriangleAlert, CircleCheck, SlidersHorizontal, CalendarCheck } from "lucide-react"
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { Sparkles } from "lucide-react";
+import { requireSession } from "@/lib/auth/session";
+import { getUserForSession } from "@/lib/auth/users";
+import { prisma } from "@/lib/prisma";
+import { CourseSelection, type AvailableSection, type RecommendedCourse } from "@/components/courses/course-selection";
 
-export default function CoursesPage() {
+const dayOrder: Record<string, number> = {
+  MONDAY: 1,
+  TUESDAY: 2,
+  WEDNESDAY: 3,
+  THURSDAY: 4,
+  FRIDAY: 5,
+  SATURDAY: 6,
+  SUNDAY: 7,
+};
+
+export default async function CoursesPage() {
+  const session = await requireSession("STUDENT");
+  const user = await getUserForSession(session.userId);
+
+  if (!user?.student) {
+    redirect("/");
+  }
+
+  const studentId = user.student.id;
+
+  const [recommendation, latestConversation] = await Promise.all([
+    prisma.student_recommendations.findFirst({
+      where: { student_id: studentId },
+      include: {
+        semester_schedule: true,
+        recommendation_subjects: {
+          include: {
+            semester_subject: { include: { subject: true } },
+            semester_section: { include: { meetings: true } },
+          },
+        },
+      },
+      orderBy: { updated_at: "desc" },
+    }),
+    prisma.recommendation_conversations.findFirst({
+      where: { student_id: studentId },
+      include: {
+        messages: {
+          where: { role: "ASSISTANT" },
+          orderBy: { created_at: "desc" },
+          take: 1,
+        },
+      },
+      orderBy: { updated_at: "desc" },
+    }),
+  ]);
+
+  if (!recommendation || recommendation.recommendation_subjects.length === 0) {
+    return (
+      <div className="flex min-h-screen w-full items-center justify-center bg-[#f9fafb] px-6 py-12">
+        <div className="flex max-w-lg flex-col items-center gap-4 rounded-2xl border border-[#e5e5e5] bg-white p-8 text-center shadow-sm">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#00A6DD]/10 text-[#00A6DD]">
+            <Sparkles className="h-6 w-6" />
+          </div>
+          <div className="space-y-2">
+            <h1 className="text-xl font-semibold text-[#0a0a0a]">No course recommendations yet</h1>
+            <p className="text-sm leading-6 text-[#737373]">
+              Answer the planning questions in the chat assistant and we will generate a validated course list for your
+              next semester.
+            </p>
+          </div>
+          <Link
+            href="/dashboard/chat"
+            className="inline-flex items-center justify-center rounded-md bg-[#00A6DD] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#008dbf]"
+          >
+            Start planning
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // Fetch all available sections for the active semester
+  const allSections = await prisma.semester_sections.findMany({
+    where: {
+      semester_subject: {
+        semester_schedule_id: recommendation.semester_schedule_id,
+      },
+    },
+    include: {
+      semester_subject: { include: { subject: true } },
+      meetings: true,
+    },
+    orderBy: { id: "asc" },
+  });
+
+  const recommendedCourses: RecommendedCourse[] = recommendation.recommendation_subjects
+    .map((item) => ({
+      id: item.id,
+      sectionId: item.semester_section_id,
+      semesterSubjectId: item.semester_subject_id,
+      subjectCode: item.semester_subject.subject.code,
+      subjectName: item.semester_subject.subject.name,
+      subjectType: item.semester_subject.subject.type,
+      credit: item.semester_subject.subject.credit,
+      sectionCode: item.semester_section.code,
+      reason: (item as { reason?: string | null }).reason ?? null,
+      meetings: item.semester_section.meetings
+        .map((m) => ({
+          day_of_week: m.day_of_week as string,
+          start_time: m.start_time,
+          end_time: m.end_time,
+        }))
+        .sort((a, b) => (dayOrder[a.day_of_week] ?? 9) - (dayOrder[b.day_of_week] ?? 9)),
+    }))
+    .sort((a, b) => {
+      const la = a.meetings[0] ? (dayOrder[a.meetings[0].day_of_week] ?? 9) : 99;
+      const lb = b.meetings[0] ? (dayOrder[b.meetings[0].day_of_week] ?? 9) : 99;
+      return la !== lb ? la - lb : a.subjectCode.localeCompare(b.subjectCode);
+    });
+
+  const availableSections: AvailableSection[] = allSections.map((section) => ({
+    sectionId: section.id,
+    semesterSubjectId: section.semester_subject_id,
+    subjectCode: section.semester_subject.subject.code,
+    subjectName: section.semester_subject.subject.name,
+    subjectType: section.semester_subject.subject.type,
+    credit: section.semester_subject.subject.credit,
+    sectionCode: section.code,
+    meetings: section.meetings
+      .map((m) => ({
+        day_of_week: m.day_of_week as string,
+        start_time: m.start_time,
+        end_time: m.end_time,
+      }))
+      .sort((a, b) => (dayOrder[a.day_of_week] ?? 9) - (dayOrder[b.day_of_week] ?? 9)),
+  }));
+
+  const assistantSummary = latestConversation?.messages[0]?.content ?? null;
+  const semesterLabel = `Semester ${recommendation.semester_schedule.semester_no} / ${recommendation.semester_schedule.semester_year}`;
+
+  // Format registration date
+  const regDate = recommendation.semester_schedule.registration_date;
+  const registrationDate = regDate
+    ? new Date(regDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+    : null;
+  const isRegistrationOpen = regDate ? new Date(regDate) <= new Date() : false;
+
   return (
-    <div className="flex h-screen w-full bg-[#f9fafb]">
-      
-      {/* Left Pane: AI Recommendations (400px) */}
-      <aside className="flex w-[400px] shrink-0 flex-col border-r border-[#e5e5e5] bg-[#f9fafb]">
-        {/* Header */}
-        <header className="flex h-14 shrink-0 items-center justify-start gap-2 border-b border-[#e5e5e5] bg-white px-5">
-          <Sparkles className="h-[18px] w-[18px] text-[#00A6DD]" />
-          <h2 className="text-sm font-semibold text-[#0a0a0a]">AI Recommendations</h2>
-        </header>
+    <div className="flex h-screen flex-col overflow-hidden bg-[#f9fafb]">
+      {/* ── Header ── */}
+      <header className="flex flex-shrink-0 items-center justify-between border-b border-[#e5e5e5] bg-white px-6 py-3">
+        <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-1.5 text-[#00A6DD]">
+            <Sparkles className="h-4 w-4" />
+            <span className="text-xs font-semibold uppercase tracking-[0.14em]">AI Recommendations</span>
+          </div>
+          <span className="text-[#d4d4d4]">/</span>
+          <h1 className="text-sm font-semibold text-[#0a0a0a]">Course Recommendations</h1>
+        </div>
+        <div className="flex items-center gap-2 text-xs">
+          <span className="rounded-full bg-[#A89A6F]/10 px-2.5 py-1 font-medium text-[#A89A6F]">{semesterLabel}</span>
+          <span className="rounded-full bg-[#00A6DD]/10 px-2.5 py-1 font-medium text-[#00A6DD]">
+            {recommendedCourses.length} recommended
+          </span>
+          <span className="rounded-full bg-[#16A34A]/10 px-2.5 py-1 font-medium text-[#16A34A]">
+            {availableSections.length} available
+          </span>
+        </div>
+      </header>
 
-        {/* AI Chat Stream */}
-        <div className="flex flex-1 flex-col gap-3.5 overflow-y-auto p-4 content-start">
-          
-          {/* AI Message 1 */}
-          <div className="flex w-full gap-2 relative">
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#00A6DD] mt-1 text-white">
-              <Sparkles className="h-3 w-3" />
+      {/* ── Body (sidebar + interactive content) ── */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Left — AI Summary */}
+        <aside className="flex w-[300px] flex-shrink-0 flex-col gap-4 overflow-y-auto border-r border-[#e5e5e5] bg-white p-4">
+          {/* Bot header */}
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-[#00A6DD]">
+              <Sparkles className="h-4 w-4 text-white" />
             </div>
-            <div className="rounded-[0_12px_12px_12px] border border-[#e5e5e5] bg-white px-3 py-2.5 shadow-sm">
-              <p className="text-[13px] text-[#0a0a0a]">Based on your preferences, I found 5 great courses + 1 backup option. Check them out on the right!</p>
-            </div>
+            <span className="text-sm font-semibold text-[#0a0a0a]">Enrollment Assistant</span>
+            <span className="ml-auto flex items-center gap-1 text-[11px] font-medium text-[#16A34A]">
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#16A34A]" />
+              Online
+            </span>
           </div>
 
-          {/* User Message 1 */}
-          <div className="flex w-full justify-end">
-            <div className="max-w-[85%] rounded-[12px_12px_0_12px] bg-[#00A6DD] px-3 py-2.5 shadow-sm">
-              <p className="text-[13px] text-white">Looks good, let me review!</p>
-            </div>
-          </div>
-
-          {/* AI Message 2: Warning */}
-          <div className="flex w-full gap-2 relative">
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#00A6DD] mt-1 text-white">
-              <Sparkles className="h-3 w-3" />
-            </div>
-            <div className="flex flex-col gap-1.5 rounded-[0_12px_12px_12px] border border-[#e5e5e5] bg-white p-2.5 shadow-sm flex-1">
-              {/* Conflict Header */}
-              <div className="flex items-center gap-1.5 self-start rounded-md border border-[#DC0963] bg-[#DC0963]/10 px-2.5 py-1.5">
-                <TriangleAlert className="h-3 w-3 text-[#DC0963]" />
-                <span className="text-[11px] font-semibold text-[#DC0963]">Schedule Conflict Detected</span>
-              </div>
-              <p className="text-[13px] text-[#0a0a0a] leading-relaxed">
-                CS301 &amp; MATH201 both meet Tue 9–11am. Should I find an alternative section?
+          {/* Summary bubble */}
+          <div className="rounded-2xl rounded-tl-none bg-[#f5f5f5] p-4">
+            {assistantSummary ? (
+              <p className="whitespace-pre-wrap text-[13px] leading-6 text-[#4a4a4a]">{assistantSummary}</p>
+            ) : (
+              <p className="text-[13px] text-[#737373]">
+                Your course recommendations are ready. Review and adjust them on the right.
               </p>
-            </div>
+            )}
           </div>
 
-          {/* User Message 2 */}
-          <div className="flex w-full justify-end">
-            <div className="max-w-[85%] rounded-[12px_12px_0_12px] bg-[#00A6DD] px-3 py-2.5 shadow-sm">
-              <p className="text-[13px] text-white">Yes, please resolve it!</p>
-            </div>
-          </div>
+          <Link
+            href="/dashboard/chat"
+            className="inline-flex items-center justify-center gap-1.5 rounded-md border border-[#e5e5e5] px-3 py-2 text-xs font-medium text-[#737373] transition-colors hover:bg-[#f5f5f5]"
+          >
+            Re-run assistant
+          </Link>
+        </aside>
 
-          {/* AI Message 3: Resolution */}
-          <div className="flex w-full gap-2 relative">
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#00A6DD] mt-1 text-white">
-              <Sparkles className="h-3 w-3" />
-            </div>
-            <div className="flex flex-col gap-1.5 rounded-[0_12px_12px_12px] border border-[#e5e5e5] bg-white p-2.5 shadow-sm flex-1">
-              {/* Resolved Header */}
-              <div className="flex items-center gap-1.5 self-start rounded-md border border-[#00A6DD] bg-[#00A6DD]/10 px-2.5 py-1.5">
-                <CircleCheck className="h-3 w-3 text-[#00A6DD]" />
-                <span className="text-[11px] font-semibold text-[#00A6DD]">Conflict Resolved</span>
-              </div>
-              <p className="text-[13px] text-[#0a0a0a] leading-relaxed">
-                Done! MATH201 moved to Thu 9–11am. Review your updated schedule on the right.
-              </p>
-            </div>
-          </div>
-
-        </div>
-      </aside>
-
-      {/* Right Pane: Course Recommendations & Schedule View */}
-      <main className="flex flex-1 flex-col overflow-hidden">
-        {/* Header */}
-        <header className="flex h-14 shrink-0 items-center justify-between border-b border-[#e5e5e5] bg-white px-6">
-          <h2 className="text-[15px] font-semibold text-[#0a0a0a]">Course Recommendations</h2>
-          <button className="flex items-center gap-2 text-[13px] text-[#737373] hover:text-[#0a0a0a] transition-colors">
-            <SlidersHorizontal className="h-4 w-4" />
-            Filter
-          </button>
-        </header>
-
-        {/* Tabs Row */}
-        <div className="flex shrink-0 border-b border-[#e5e5e5] bg-white px-6 pt-2">
-          <div className="flex items-center gap-6">
-            <button className="border-b-2 border-[#00A6DD] pb-3 text-[13px] font-semibold text-[#00A6DD]">
-              Recommended (5)
-            </button>
-            <button className="border-b-2 border-transparent pb-3 text-[13px] text-[#737373] hover:text-[#0a0a0a] transition-colors">
-              All Available
-            </button>
-          </div>
-        </div>
-
-        {/* Main Interface Content Area */}
-        <div className="flex flex-1 flex-col overflow-y-auto">
-          
-          {/* Data Table */}
-          <div className="flex w-full flex-col px-6">
-            {/* Headers */}
-            <div className="flex border-b border-[#e5e5e5] py-2 pt-4 items-center">
-              <span className="w-[88px] text-[11px] font-medium tracking-wide text-[#737373]">CODE</span>
-              <span className="flex-1 text-[11px] font-medium tracking-wide text-[#737373]">SUBJECT NAME</span>
-              <span className="w-10 text-[11px] font-medium tracking-wide text-[#737373]">CR</span>
-              <span className="w-32 text-[11px] font-medium tracking-wide text-[#737373]">SCHEDULE</span>
-              <span className="w-16 text-right text-[11px] font-medium tracking-wide text-[#737373]">STATUS</span>
-            </div>
-
-            {/* Ra1 */}
-            <div className="flex border-b border-[#f0f0f0] py-2.5 items-center">
-              <span className="w-[88px] text-[13px] text-[#0a0a0a]">CS301</span>
-              <span className="flex-1 text-[13px] text-[#0a0a0a]">Software Engineering</span>
-              <span className="w-10 text-[13px] text-[#737373]">3</span>
-              <span className="w-32 text-xs text-[#737373]">Mon 9–12</span>
-              <span className="w-16 text-right text-xs font-medium text-[#16A34A]">Selected</span>
-            </div>
-
-            {/* Ra2 */}
-            <div className="flex border-b border-[#f0f0f0] py-2.5 items-center">
-              <span className="w-[88px] text-[13px] text-[#0a0a0a]">MATH201</span>
-              <span className="flex-1 text-[13px] text-[#0a0a0a]">Calculus for Engineers</span>
-              <span className="w-10 text-[13px] text-[#737373]">3</span>
-              <span className="w-32 text-xs text-[#737373]">Thu 9–11</span>
-              <span className="w-16 text-right text-xs font-medium text-[#00A6DD]">Resolved</span>
-            </div>
-
-            {/* Ra3 */}
-            <div className="flex border-b border-[#f0f0f0] py-2.5 items-center">
-              <span className="w-[88px] text-[13px] text-[#0a0a0a]">CS302</span>
-              <span className="flex-1 text-[13px] text-[#0a0a0a]">Data Structures &amp; Algorithms</span>
-              <span className="w-10 text-[13px] text-[#737373]">3</span>
-              <span className="w-32 text-xs text-[#737373]">Fri 9–12</span>
-              <span className="w-16 text-right text-xs font-medium text-[#16A34A]">Selected</span>
-            </div>
-
-            {/* Ra4 */}
-            <div className="flex border-b border-[#f0f0f0] py-2.5 items-center">
-              <span className="w-[88px] text-[13px] text-[#0a0a0a]">ENG102</span>
-              <span className="flex-1 text-[13px] text-[#0a0a0a]">Academic English</span>
-              <span className="w-10 text-[13px] text-[#737373]">2</span>
-              <span className="w-32 text-xs text-[#737373]">Mon 13–15</span>
-              <span className="w-16 text-right text-xs font-medium text-[#16A34A]">Selected</span>
-            </div>
-
-            {/* Ra5 (Backup) */}
-            <div className="flex border-b border-[#00A6DD]/10 bg-[#00A6DD]/[0.05] -mx-6 px-6 py-2.5 items-center">
-              <span className="w-[88px] text-[13px] text-[#0a0a0a]">CS290</span>
-              <span className="flex-1 text-[13px] text-[#0a0a0a]">Web Application Development</span>
-              <span className="w-10 text-[13px] text-[#737373]">3</span>
-              <span className="w-32 text-xs text-[#737373]">Fri 13–15</span>
-              <span className="w-16 text-right text-xs font-medium text-[#A89A6F]">Backup</span>
-            </div>
-          </div>
-
-          <div className="h-6" /> {/* Separator gap */}
-
-          {/* Schedule Visualization Title */}
-          <div className="flex w-full items-center justify-between px-6 py-3">
-            <h3 className="text-[13px] font-semibold text-[#0a0a0a]">Weekly Schedule Preview</h3>
-            <span className="text-xs text-[#737373]">Mon &mdash; Fri</span>
-          </div>
-
-          {/* Visual Grid Layer */}
-          <div className="flex w-full flex-1 min-h-[160px] gap-1 px-6 pb-6">
-            
-            {/* MON */}
-            <div className="flex flex-1 flex-col gap-1.5 border-r border-[#f0f0f0] pr-1">
-              <div className="text-center text-[10px] font-semibold text-[#737373] pb-1">MON</div>
-              {/* Class block A */}
-              <div className="flex flex-col gap-0.5 rounded shadow-sm bg-[#00A6DD] p-1.5 text-white">
-                <span className="text-[10px] font-semibold leading-none">CS301</span>
-                <span className="text-[9px] text-white/80 leading-none">9–12am</span>
-              </div>
-              {/* Class block B */}
-              <div className="flex flex-col gap-0.5 rounded shadow-sm bg-[#16A34A] p-1.5 text-white mt-[8px]">
-                <span className="text-[10px] font-semibold leading-none">ENG102</span>
-                <span className="text-[9px] text-white/80 leading-none">1–3pm</span>
-              </div>
-            </div>
-
-            {/* TUE */}
-            <div className="flex flex-1 flex-col gap-1.5 border-r border-[#f0f0f0] px-1">
-              <div className="text-center text-[10px] font-semibold text-[#737373] pb-1">TUE</div>
-              {/* Empty Column */}
-            </div>
-
-            {/* WED */}
-            <div className="flex flex-1 flex-col gap-1.5 border-r border-[#f0f0f0] px-1">
-              <div className="text-center text-[10px] font-semibold text-[#737373] pb-1">WED</div>
-              {/* Empty Column */}
-            </div>
-
-            {/* THU */}
-            <div className="flex flex-1 flex-col gap-1.5 border-r border-[#f0f0f0] px-1">
-              <div className="text-center text-[10px] font-semibold text-[#737373] pb-1">THU</div>
-              {/* Class block A */}
-              <div className="flex flex-col gap-0.5 rounded shadow-sm bg-[#7C3AED] p-1.5 text-white">
-                <span className="text-[10px] font-semibold leading-none">MATH201</span>
-                <span className="text-[9px] text-white/80 leading-none">9–11am</span>
-              </div>
-            </div>
-
-            {/* FRI */}
-            <div className="flex flex-1 flex-col gap-1.5 px-1">
-              <div className="text-center text-[10px] font-semibold text-[#737373] pb-1">FRI</div>
-              {/* Class block A */}
-              <div className="flex flex-col gap-0.5 rounded shadow-sm bg-[#00A6DD] p-1.5 text-white">
-                <span className="text-[10px] font-semibold leading-none">CS302</span>
-                <span className="text-[9px] text-white/80 leading-none">9–12am</span>
-              </div>
-              {/* Class block B */}
-              <div className="flex flex-col gap-0.5 rounded shadow-sm bg-[#A89A6F] p-1.5 text-white mt-[8px]">
-                <span className="text-[10px] font-semibold leading-none">CS290 (alt)</span>
-                <span className="text-[9px] text-white/80 leading-none">1–3pm</span>
-              </div>
-            </div>
-
-          </div>
-        </div>
-
-        {/* Global Footer Controls Toolbar */}
-        <div className="flex h-16 shrink-0 w-full items-center justify-between border-t border-[#e5e5e5] bg-white px-6">
-          <button className="flex h-9 items-center justify-center rounded-md bg-[#00A6DD] px-5 text-sm font-medium text-white shadow-sm hover:bg-[#008dbf] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#00A6DD]">
-            Save My Course Choices
-          </button>
-          
-          <div className="flex items-center gap-4">
-            <span className="text-xs text-[#737373]">Registration opens Jan 15, 2569</span>
-            <button className="flex h-9 items-center justify-center gap-2 rounded-md bg-[#DC0963] px-5 text-sm font-semibold text-white shadow-sm hover:bg-[#b50854] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#DC0963]">
-              <CalendarCheck className="h-4 w-4" />
-              Register Now
-            </button>
-          </div>
-        </div>
-      </main>
-
+        {/* Right — Interactive course selection (client component) */}
+        <CourseSelection
+          recommended={recommendedCourses}
+          available={availableSections}
+          semesterLabel={semesterLabel}
+          registrationDate={registrationDate}
+          isRegistrationOpen={isRegistrationOpen}
+        />
+      </div>
     </div>
-  )
+  );
 }

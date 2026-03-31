@@ -2,7 +2,7 @@ import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
-export type AppRole = "STUDENT" | "INSTRUCTOR";
+export type AppRole = "STUDENT" | "INSTRUCTOR" | "ADMIN";
 
 const SESSION_COOKIE_NAME = "smart-rsu-session";
 const SESSION_DURATION_SECONDS = 60 * 60 * 24 * 7;
@@ -62,7 +62,7 @@ export async function getSession() {
     if (
       typeof payload.userId !== "number" ||
       typeof payload.email !== "string" ||
-      (payload.role !== "STUDENT" && payload.role !== "INSTRUCTOR")
+      (payload.role !== "STUDENT" && payload.role !== "INSTRUCTOR" && payload.role !== "ADMIN")
     ) {
       return null;
     }
@@ -102,5 +102,7 @@ export async function requireSession(role?: AppRole) {
 }
 
 export function getPostLoginPath(role: AppRole) {
-  return role === "STUDENT" ? "/dashboard" : "/instructor";
+  if (role === "STUDENT") return "/dashboard";
+  if (role === "ADMIN") return "/admin";
+  return "/instructor";
 }
