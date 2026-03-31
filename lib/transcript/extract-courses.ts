@@ -1,5 +1,3 @@
-import { PDFParse } from "pdf-parse";
-
 export type TranscriptCourse = {
   code: string;
   name: string;
@@ -80,8 +78,13 @@ function parseCourseRow(rawLine: string): Omit<TranscriptCourse, "semesterNo" | 
 }
 
 export async function extractCoursesFromPDF(buffer: Buffer): Promise<TranscriptCourse[]> {
+  // pdf-parse v2 relies on canvas-backed polyfills such as DOMMatrix in serverless Node runtimes.
+  await import("pdf-parse/worker");
+  const { PDFParse } = await import("pdf-parse");
   const parser = new PDFParse({ data: new Uint8Array(buffer) });
   const result = await parser.getText({});
+
+  await parser.destroy();
 
   const allText = (result.pages as { text: string }[]).map((p) => p.text).join("\n");
   const rawLines = allText.split("\n").map((l) => l.trim()).filter(Boolean);

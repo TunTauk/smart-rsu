@@ -1,6 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { extractCoursesFromPDF } from "@/lib/transcript/extract-courses";
 
+export const runtime = "nodejs";
+
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 
 export async function POST(req: NextRequest) {
