@@ -7,9 +7,11 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "prisma:push": "prisma db push",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:studio": "prisma studio"
+    "prisma:studio": "prisma studio",
+    "prisma:seed": "prisma db seed"
   },
   "dependencies": {
     "@prisma/client": "^7.6.0",
@@ -30,5 +32,8 @@
     "prisma": "^6.7.0",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "prisma": {
+    "seed": "node prisma/seed.mjs"
   }
 }
