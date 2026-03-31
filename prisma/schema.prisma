@@ -7,6 +7,300 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model users {
+  id            Int          @id @default(autoincrement())
+  email         String       @unique
+  password_hash String
+  role          UserRole
+  created_at    DateTime     @default(now())
+  updated_at    DateTime     @updatedAt
+  instructor    instructors?
+  student       students?
+}
+
+model students {
+  id                           Int                            @id @default(autoincrement())
+  user_id                      Int                            @unique
+  rsu_id                       String                         @unique
+  name                         String
+  major_id                     Int
+  created_at                   DateTime                       @default(now())
+  updated_at                   DateTime                       @updatedAt
+  recommendation_conversations recommendation_conversations[]
+  registration_reminders       registration_reminders[]
+  course_histories             student_course_histories[]
+  preference_answers           student_preference_answers[]
+  recommendations              student_recommendations[]
+  saved_plans                  student_saved_plans[]
+  major                        majors                         @relation(fields: [major_id], references: [id])
+  user                         users                          @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([major_id], map: "students_major_id_fkey")
+}
+
+model instructors {
+  id                           Int                             @id @default(autoincrement())
+  user_id                      Int                             @unique
+  name                         String
+  bio                          String?
+  profile_url                  String?
+  department                   String?
+  personality_summary          String?
+  created_at                   DateTime                        @default(now())
+  updated_at                   DateTime                        @updatedAt
+  preference_answers           instructor_preference_answers[]
+  user                         users                           @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  semester_section_instructors semester_section_instructors[]
+}
+
+model majors {
+  id                 Int                  @id @default(autoincrement())
+  code               String               @unique
+  name               String
+  major_subjects     major_subjects[]
+  semester_schedules semester_schedules[]
+  students           students[]
+}
+
+model subjects {
+  id                 Int                        @id @default(autoincrement())
+  code               String                     @unique
+  name               String
+  description        String?
+  prerequisite_id    Int?
+  type               String
+  credit             Int
+  major_subjects     major_subjects[]
+  semester_subjects  semester_subjects[]
+  course_histories   student_course_histories[]
+  prerequisite       subjects?                  @relation("subject_prerequisite", fields: [prerequisite_id], references: [id])
+  dependent_subjects subjects[]                 @relation("subject_prerequisite")
+
+  @@index([prerequisite_id], map: "subjects_prerequisite_id_fkey")
+}
+
+model major_subjects {
+  id         Int      @id @default(autoincrement())
+  major_id   Int
+  subject_id Int
+  major      majors   @relation(fields: [major_id], references: [id], onDelete: Cascade)
+  subject    subjects @relation(fields: [subject_id], references: [id], onDelete: Cascade)
+
+  @@unique([major_id, subject_id])
+  @@index([subject_id], map: "major_subjects_subject_id_fkey")
+}
+
+model semester_schedules {
+  id                     Int                       @id @default(autoincrement())
+  semester_no            Int
+  semester_year          Int
+  major_id               Int
+  registration_date      DateTime
+  registration_reminders registration_reminders[]
+  major                  majors                    @relation(fields: [major_id], references: [id], onDelete: Cascade)
+  semester_subjects      semester_subjects[]
+  student_recommendation student_recommendations[]
+  student_saved_plans    student_saved_plans[]
+
+  @@unique([semester_no, semester_year, major_id])
+  @@index([major_id], map: "semester_schedules_major_id_fkey")
+}
+
+model semester_subjects {
+  id                      Int                               @id @default(autoincrement())
+  semester_schedule_id    Int
+  subject_id              Int
+  sections                semester_sections[]
+  semester_schedule       semester_schedules                @relation(fields: [semester_schedule_id], references: [id], onDelete: Cascade)
+  subject                 subjects                          @relation(fields: [subject_id], references: [id], onDelete: Cascade)
+  recommendation_subjects student_recommendation_subjects[]
+  saved_plan_subjects     student_saved_plan_subjects[]
+
+  @@unique([semester_schedule_id, subject_id])
+  @@index([subject_id], map: "semester_subjects_subject_id_fkey")
+}
+
+model semester_sections {
+  id                      Int                               @id @default(autoincrement())
+  semester_subject_id     Int
+  code                    String
+  section_instructors     semester_section_instructors[]
+  meetings                semester_section_meetings[]
+  semester_subject        semester_subjects                 @relation(fields: [semester_subject_id], references: [id], onDelete: Cascade)
+  recommendation_subjects student_recommendation_subjects[]
+  saved_plan_subjects     student_saved_plan_subjects[]
+
+  @@unique([semester_subject_id, code])
+}
+
+model semester_section_meetings {
+  id                  Int               @id @default(autoincrement())
+  semester_section_id Int
+  day_of_week         DayOfWeek
+  start_time          String
+  end_time            String
+  semester_section    semester_sections @relation(fields: [semester_section_id], references: [id], onDelete: Cascade)
+
+  @@index([semester_section_id], map: "semester_section_meetings_semester_section_id_fkey")
+}
+
+model semester_section_instructors {
+  id                  Int               @id @default(autoincrement())
+  semester_section_id Int
+  instructor_id       Int
+  instructor          instructors       @relation(fields: [instructor_id], references: [id], onDelete: Cascade)
+  semester_section    semester_sections @relation(fields: [semester_section_id], references: [id], onDelete: Cascade)
+
+  @@unique([semester_section_id, instructor_id])
+  @@index([instructor_id], map: "semester_section_instructors_instructor_id_fkey")
+}
+
+model student_course_histories {
+  id            Int                 @id @default(autoincrement())
+  student_id    Int
+  subject_id    Int
+  grade         String
+  credit_earned Int
+  semester_no   Int?
+  semester_year Int?
+  source        CourseHistorySource
+  created_at    DateTime            @default(now())
+  updated_at    DateTime            @updatedAt
+  student       students            @relation(fields: [student_id], references: [id], onDelete: Cascade)
+  subject       subjects            @relation(fields: [subject_id], references: [id])
+
+  @@index([student_id], map: "student_course_histories_student_id_fkey")
+  @@index([subject_id], map: "student_course_histories_subject_id_fkey")
+}
+
+model preference_questions {
+  id                            Int                             @id @default(autoincrement())
+  question                      String
+  user_type                     PreferenceUserType
+  question_type                 PreferenceQuestionType
+  answers                       Json?
+  instructor_preference_answers instructor_preference_answers[]
+  student_preference_answers    student_preference_answers[]
+}
+
+model student_preference_answers {
+  id                     Int                  @id @default(autoincrement())
+  student_id             Int
+  preference_question_id Int
+  answers                Json
+  preference_question    preference_questions @relation(fields: [preference_question_id], references: [id], onDelete: Cascade)
+  student                students             @relation(fields: [student_id], references: [id], onDelete: Cascade)
+
+  @@unique([student_id, preference_question_id])
+  @@index([preference_question_id], map: "student_preference_answers_preference_question_id_fkey")
+}
+
+model instructor_preference_answers {
+  id                     Int                  @id @default(autoincrement())
+  instructor_id          Int
+  preference_question_id Int
+  answers                Json
+  instructor             instructors          @relation(fields: [instructor_id], references: [id], onDelete: Cascade)
+  preference_question    preference_questions @relation(fields: [preference_question_id], references: [id], onDelete: Cascade)
+
+  @@unique([instructor_id, preference_question_id])
+  @@index([preference_question_id], map: "instructor_preference_answers_preference_question_id_fkey")
+}
+
+model recommendation_conversations {
+  id         Int                       @id @default(autoincrement())
+  student_id Int
+  created_at DateTime                  @default(now())
+  updated_at DateTime                  @updatedAt
+  student    students                  @relation(fields: [student_id], references: [id], onDelete: Cascade)
+  messages   recommendation_messages[]
+
+  @@index([student_id], map: "recommendation_conversations_student_id_fkey")
+}
+
+model recommendation_messages {
+  id              Int                          @id @default(autoincrement())
+  conversation_id Int
+  role            RecommendationMessageRole
+  content         String
+  created_at      DateTime                     @default(now())
+  conversation    recommendation_conversations @relation(fields: [conversation_id], references: [id], onDelete: Cascade)
+
+  @@index([conversation_id], map: "recommendation_messages_conversation_id_fkey")
+}
+
+model student_recommendations {
+  id                      Int                               @id @default(autoincrement())
+  student_id              Int
+  semester_schedule_id    Int
+  created_at              DateTime                          @default(now())
+  updated_at              DateTime                          @updatedAt
+  recommendation_subjects student_recommendation_subjects[]
+  semester_schedule       semester_schedules                @relation(fields: [semester_schedule_id], references: [id], onDelete: Cascade)
+  student                 students                          @relation(fields: [student_id], references: [id], onDelete: Cascade)
+
+  @@unique([student_id, semester_schedule_id])
+  @@index([semester_schedule_id], map: "student_recommendations_semester_schedule_id_fkey")
+}
+
+model student_recommendation_subjects {
+  id                        Int                     @id @default(autoincrement())
+  student_recommendation_id Int
+  semester_subject_id       Int
+  semester_section_id       Int
+  semester_section          semester_sections       @relation(fields: [semester_section_id], references: [id], onDelete: Cascade)
+  semester_subject          semester_subjects       @relation(fields: [semester_subject_id], references: [id], onDelete: Cascade)
+  student_recommendation    student_recommendations @relation(fields: [student_recommendation_id], references: [id], onDelete: Cascade)
+
+  @@unique([student_recommendation_id, semester_subject_id, semester_section_id])
+  @@index([semester_section_id], map: "student_recommendation_subjects_semester_section_id_fkey")
+  @@index([semester_subject_id], map: "student_recommendation_subjects_semester_subject_id_fkey")
+}
+
+model student_saved_plans {
+  id                   Int                           @id @default(autoincrement())
+  student_id           Int
+  semester_schedule_id Int
+  name                 String?
+  created_at           DateTime                      @default(now())
+  updated_at           DateTime                      @updatedAt
+  saved_plan_subjects  student_saved_plan_subjects[]
+  semester_schedule    semester_schedules            @relation(fields: [semester_schedule_id], references: [id], onDelete: Cascade)
+  student              students                      @relation(fields: [student_id], references: [id], onDelete: Cascade)
+
+  @@index([semester_schedule_id], map: "student_saved_plans_semester_schedule_id_fkey")
+  @@index([student_id], map: "student_saved_plans_student_id_fkey")
+}
+
+model student_saved_plan_subjects {
+  id                    Int                 @id @default(autoincrement())
+  student_saved_plan_id Int
+  semester_subject_id   Int
+  semester_section_id   Int
+  semester_section      semester_sections   @relation(fields: [semester_section_id], references: [id], onDelete: Cascade)
+  semester_subject      semester_subjects   @relation(fields: [semester_subject_id], references: [id], onDelete: Cascade)
+  student_saved_plan    student_saved_plans @relation(fields: [student_saved_plan_id], references: [id], onDelete: Cascade)
+
+  @@unique([student_saved_plan_id, semester_subject_id, semester_section_id])
+  @@index([semester_section_id], map: "student_saved_plan_subjects_semester_section_id_fkey")
+  @@index([semester_subject_id], map: "student_saved_plan_subjects_semester_subject_id_fkey")
+}
+
+model registration_reminders {
+  id                   Int                @id @default(autoincrement())
+  student_id           Int
+  semester_schedule_id Int
+  enabled              Boolean            @default(true)
+  sent_at              DateTime?
+  created_at           DateTime           @default(now())
+  updated_at           DateTime           @updatedAt
+  semester_schedule    semester_schedules @relation(fields: [semester_schedule_id], references: [id], onDelete: Cascade)
+  student              students           @relation(fields: [student_id], references: [id], onDelete: Cascade)
+
+  @@unique([student_id, semester_schedule_id])
+  @@index([semester_schedule_id], map: "registration_reminders_semester_schedule_id_fkey")
+}
+
 enum UserRole {
   STUDENT    @map("student")
   INSTRUCTOR @map("instructor")
@@ -43,270 +337,4 @@ enum CourseHistorySource {
   TRANSCRIPT @map("transcript")
   MANUAL     @map("manual")
   SYSTEM     @map("system")
-}
-
-model users {
-  id            Int        @id @default(autoincrement())
-  email         String     @unique
-  password_hash String
-  role          UserRole
-  created_at    DateTime   @default(now())
-  updated_at    DateTime   @updatedAt
-  student       students?
-  instructor    instructors?
-}
-
-model students {
-  id                           Int                            @id @default(autoincrement())
-  user_id                      Int                            @unique
-  rsu_id                       String                         @unique
-  name                         String
-  major_id                     Int
-  created_at                   DateTime                       @default(now())
-  updated_at                   DateTime                       @updatedAt
-  user                         users                          @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  major                        majors                         @relation(fields: [major_id], references: [id])
-  course_histories             student_course_histories[]
-  preference_answers           student_preference_answers[]
-  recommendation_conversations recommendation_conversations[]
-  recommendations              student_recommendations[]
-  saved_plans                  student_saved_plans[]
-  registration_reminders       registration_reminders[]
-}
-
-model instructors {
-  id                           Int                             @id @default(autoincrement())
-  user_id                      Int                             @unique
-  name                         String
-  bio                          String?
-  profile_url                  String?
-  department                   String?
-  personality_summary          String?
-  created_at                   DateTime                        @default(now())
-  updated_at                   DateTime                        @updatedAt
-  user                         users                           @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  preference_answers           instructor_preference_answers[]
-  semester_section_instructors semester_section_instructors[]
-}
-
-model majors {
-  id                 Int                 @id @default(autoincrement())
-  code               String              @unique
-  name               String
-  students           students[]
-  major_subjects     major_subjects[]
-  semester_schedules semester_schedules[]
-}
-
-model subjects {
-  id                     Int                        @id @default(autoincrement())
-  code                   String                     @unique
-  name                   String
-  description            String?
-  prerequisite_id        Int?
-  type                   String
-  credit                 Int
-  prerequisite           subjects?                  @relation("subject_prerequisite", fields: [prerequisite_id], references: [id])
-  dependent_subjects     subjects[]                 @relation("subject_prerequisite")
-  major_subjects         major_subjects[]
-  semester_subjects      semester_subjects[]
-  course_histories       student_course_histories[]
-}
-
-model major_subjects {
-  id         Int      @id @default(autoincrement())
-  major_id   Int
-  subject_id Int
-  major      majors   @relation(fields: [major_id], references: [id], onDelete: Cascade)
-  subject    subjects @relation(fields: [subject_id], references: [id], onDelete: Cascade)
-
-  @@unique([major_id, subject_id])
-}
-
-model semester_schedules {
-  id                     Int                       @id @default(autoincrement())
-  semester_no            Int
-  semester_year          Int
-  major_id               Int
-  registration_date      DateTime
-  major                  majors                    @relation(fields: [major_id], references: [id], onDelete: Cascade)
-  semester_subjects      semester_subjects[]
-  student_recommendation student_recommendations[]
-  student_saved_plans    student_saved_plans[]
-  registration_reminders registration_reminders[]
-
-  @@unique([semester_no, semester_year, major_id])
-}
-
-model semester_subjects {
-  id                      Int                               @id @default(autoincrement())
-  semester_schedule_id    Int
-  subject_id              Int
-  semester_schedule       semester_schedules                @relation(fields: [semester_schedule_id], references: [id], onDelete: Cascade)
-  subject                 subjects                          @relation(fields: [subject_id], references: [id], onDelete: Cascade)
-  sections                semester_sections[]
-  recommendation_subjects student_recommendation_subjects[]
-  saved_plan_subjects     student_saved_plan_subjects[]
-
-  @@unique([semester_schedule_id, subject_id])
-}
-
-model semester_sections {
-  id                      Int                               @id @default(autoincrement())
-  semester_subject_id     Int
-  code                    String
-  semester_subject        semester_subjects                 @relation(fields: [semester_subject_id], references: [id], onDelete: Cascade)
-  meetings                semester_section_meetings[]
-  section_instructors     semester_section_instructors[]
-  recommendation_subjects student_recommendation_subjects[]
-  saved_plan_subjects     student_saved_plan_subjects[]
-
-  @@unique([semester_subject_id, code])
-}
-
-model semester_section_meetings {
-  id                  Int               @id @default(autoincrement())
-  semester_section_id Int
-  day_of_week         DayOfWeek
-  start_time          String
-  end_time            String
-  semester_section    semester_sections @relation(fields: [semester_section_id], references: [id], onDelete: Cascade)
-}
-
-model semester_section_instructors {
-  id                  Int               @id @default(autoincrement())
-  semester_section_id Int
-  instructor_id       Int
-  semester_section    semester_sections @relation(fields: [semester_section_id], references: [id], onDelete: Cascade)
-  instructor          instructors       @relation(fields: [instructor_id], references: [id], onDelete: Cascade)
-
-  @@unique([semester_section_id, instructor_id])
-}
-
-model student_course_histories {
-  id            Int                 @id @default(autoincrement())
-  student_id    Int
-  subject_id    Int
-  grade         String
-  credit_earned Int
-  semester_no   Int?
-  semester_year Int?
-  source        CourseHistorySource
-  created_at    DateTime            @default(now())
-  updated_at    DateTime            @updatedAt
-  student       students            @relation(fields: [student_id], references: [id], onDelete: Cascade)
-  subject       subjects            @relation(fields: [subject_id], references: [id])
-}
-
-model preference_questions {
-  id                             Int                              @id @default(autoincrement())
-  question                       String
-  user_type                      PreferenceUserType
-  question_type                  PreferenceQuestionType
-  answers                        Json?
-  student_preference_answers     student_preference_answers[]
-  instructor_preference_answers  instructor_preference_answers[]
-}
-
-model student_preference_answers {
-  id                     Int                  @id @default(autoincrement())
-  student_id             Int
-  preference_question_id Int
-  answers                Json
-  student                students             @relation(fields: [student_id], references: [id], onDelete: Cascade)
-  preference_question    preference_questions @relation(fields: [preference_question_id], references: [id], onDelete: Cascade)
-
-  @@unique([student_id, preference_question_id])
-}
-
-model instructor_preference_answers {
-  id                     Int                  @id @default(autoincrement())
-  instructor_id          Int
-  preference_question_id Int
-  answers                Json
-  instructor             instructors          @relation(fields: [instructor_id], references: [id], onDelete: Cascade)
-  preference_question    preference_questions @relation(fields: [preference_question_id], references: [id], onDelete: Cascade)
-
-  @@unique([instructor_id, preference_question_id])
-}
-
-model recommendation_conversations {
-  id         Int                       @id @default(autoincrement())
-  student_id Int
-  created_at DateTime                  @default(now())
-  updated_at DateTime                  @updatedAt
-  student    students                  @relation(fields: [student_id], references: [id], onDelete: Cascade)
-  messages   recommendation_messages[]
-}
-
-model recommendation_messages {
-  id              Int                          @id @default(autoincrement())
-  conversation_id Int
-  role            RecommendationMessageRole
-  content         String
-  created_at      DateTime                     @default(now())
-  conversation    recommendation_conversations @relation(fields: [conversation_id], references: [id], onDelete: Cascade)
-}
-
-model student_recommendations {
-  id                      Int                               @id @default(autoincrement())
-  student_id              Int
-  semester_schedule_id    Int
-  created_at              DateTime                          @default(now())
-  updated_at              DateTime                          @updatedAt
-  student                 students                          @relation(fields: [student_id], references: [id], onDelete: Cascade)
-  semester_schedule       semester_schedules                @relation(fields: [semester_schedule_id], references: [id], onDelete: Cascade)
-  recommendation_subjects student_recommendation_subjects[]
-
-  @@unique([student_id, semester_schedule_id])
-}
-
-model student_recommendation_subjects {
-  id                        Int                     @id @default(autoincrement())
-  student_recommendation_id Int
-  semester_subject_id       Int
-  semester_section_id       Int
-  student_recommendation    student_recommendations @relation(fields: [student_recommendation_id], references: [id], onDelete: Cascade)
-  semester_subject          semester_subjects       @relation(fields: [semester_subject_id], references: [id], onDelete: Cascade)
-  semester_section          semester_sections       @relation(fields: [semester_section_id], references: [id], onDelete: Cascade)
-
-  @@unique([student_recommendation_id, semester_subject_id, semester_section_id])
-}
-
-model student_saved_plans {
-  id                   Int                          @id @default(autoincrement())
-  student_id           Int
-  semester_schedule_id Int
-  name                 String?
-  created_at           DateTime                     @default(now())
-  updated_at           DateTime                     @updatedAt
-  student              students                     @relation(fields: [student_id], references: [id], onDelete: Cascade)
-  semester_schedule    semester_schedules           @relation(fields: [semester_schedule_id], references: [id], onDelete: Cascade)
-  saved_plan_subjects  student_saved_plan_subjects[]
-}
-
-model student_saved_plan_subjects {
-  id                    Int                 @id @default(autoincrement())
-  student_saved_plan_id Int
-  semester_subject_id   Int
-  semester_section_id   Int
-  student_saved_plan    student_saved_plans @relation(fields: [student_saved_plan_id], references: [id], onDelete: Cascade)
-  semester_subject      semester_subjects   @relation(fields: [semester_subject_id], references: [id], onDelete: Cascade)
-  semester_section      semester_sections   @relation(fields: [semester_section_id], references: [id], onDelete: Cascade)
-
-  @@unique([student_saved_plan_id, semester_subject_id, semester_section_id])
-}
-
-model registration_reminders {
-  id                   Int                @id @default(autoincrement())
-  student_id           Int
-  semester_schedule_id Int
-  enabled              Boolean            @default(true)
-  sent_at              DateTime?
-  created_at           DateTime           @default(now())
-  updated_at           DateTime           @updatedAt
-  student              students           @relation(fields: [student_id], references: [id], onDelete: Cascade)
-  semester_schedule    semester_schedules @relation(fields: [semester_schedule_id], references: [id], onDelete: Cascade)
-
-  @@unique([student_id, semester_schedule_id])
 }

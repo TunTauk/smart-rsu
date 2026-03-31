@@ -35,7 +35,13 @@ export async function login(
       email: user.email,
       role: user.role,
     });
-  } catch {
+  } catch (error) {
+    console.error("Login failed", error);
+
+    if (error instanceof Error && error.message.includes("AUTH_SECRET")) {
+      return { error: "Server auth secret is missing. Please check AUTH_SECRET." };
+    }
+
     return { error: "Unable to sign in right now. Please try again." };
   }
 

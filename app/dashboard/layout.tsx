@@ -1,10 +1,16 @@
+"use client"
+
 import { Hexagon, LayoutDashboard, MessageCircle, BookOpen, Calendar, User, LogOut } from "lucide-react"
+import Link from "next/link"
+import { usePathname } from "next/navigation"
 
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  const pathname = usePathname()
+
   return (
     <div className="flex min-h-screen w-full font-sans bg-[#f9fafb]">
       
@@ -21,32 +27,58 @@ export default function DashboardLayout({
 
         {/* Navigation */}
         <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto">
-          {/* Active Item */}
-          <a href="#" className="flex items-center gap-2 rounded-md bg-[#00A6DD]/10 px-2 py-2">
-            <LayoutDashboard className="h-4 w-4 text-[#00A6DD]" />
-            <span className="text-sm font-semibold text-[#00A6DD]">Home</span>
-          </a>
           
-          {/* Inactive Items */}
-          <a href="#" className="flex items-center gap-2 rounded-md px-2 py-2 hover:bg-[#f5f5f5] transition-colors">
-            <MessageCircle className="h-4 w-4 text-[#737373]" />
-            <span className="text-sm font-medium text-[#0a0a0a]">Chat Assistant</span>
-          </a>
+          <Link 
+            href="/dashboard" 
+            className={`flex items-center gap-2 rounded-md px-2 py-2 transition-colors ${
+              pathname === "/dashboard" 
+                ? "bg-[#00A6DD]/10" 
+                : "hover:bg-[#f5f5f5]"
+            }`}
+          >
+            <LayoutDashboard className={`h-4 w-4 ${pathname === "/dashboard" ? "text-[#00A6DD]" : "text-[#737373]"}`} />
+            <span className={`text-sm ${pathname === "/dashboard" ? "font-semibold text-[#00A6DD]" : "font-medium text-[#0a0a0a]"}`}>
+              Home
+            </span>
+          </Link>
           
-          <a href="#" className="flex items-center gap-2 rounded-md px-2 py-2 hover:bg-[#f5f5f5] transition-colors">
-            <BookOpen className="h-4 w-4 text-[#737373]" />
-            <span className="text-sm font-medium text-[#0a0a0a]">My Courses</span>
-          </a>
+          <Link 
+            href="/dashboard/chat" 
+            className={`flex items-center gap-2 rounded-md px-2 py-2 transition-colors ${
+              pathname === "/dashboard/chat" 
+                ? "bg-[#00A6DD]/10" 
+                : "hover:bg-[#f5f5f5]"
+            }`}
+          >
+            <MessageCircle className={`h-4 w-4 ${pathname === "/dashboard/chat" ? "text-[#00A6DD]" : "text-[#737373]"}`} />
+            <span className={`text-sm ${pathname === "/dashboard/chat" ? "font-semibold text-[#00A6DD]" : "font-medium text-[#0a0a0a]"}`}>
+              Chat Assistant
+            </span>
+          </Link>
           
-          <a href="#" className="flex items-center gap-2 rounded-md px-2 py-2 hover:bg-[#f5f5f5] transition-colors">
+          <Link 
+            href="/dashboard/courses" 
+            className={`flex items-center gap-2 rounded-md px-2 py-2 transition-colors ${
+              pathname === "/dashboard/courses" 
+                ? "bg-[#00A6DD]/10" 
+                : "hover:bg-[#f5f5f5]"
+            }`}
+          >
+            <BookOpen className={`h-4 w-4 ${pathname === "/dashboard/courses" ? "text-[#00A6DD]" : "text-[#737373]"}`} />
+            <span className={`text-sm ${pathname === "/dashboard/courses" ? "font-semibold text-[#00A6DD]" : "font-medium text-[#0a0a0a]"}`}>
+              My Courses
+            </span>
+          </Link>
+          
+          <Link href="#" className="flex items-center gap-2 rounded-md px-2 py-2 hover:bg-[#f5f5f5] transition-colors">
             <Calendar className="h-4 w-4 text-[#737373]" />
             <span className="text-sm font-medium text-[#0a0a0a]">Schedule</span>
-          </a>
+          </Link>
           
-          <a href="#" className="flex items-center gap-2 rounded-md px-2 py-2 hover:bg-[#f5f5f5] transition-colors">
+          <Link href="#" className="flex items-center gap-2 rounded-md px-2 py-2 hover:bg-[#f5f5f5] transition-colors">
             <User className="h-4 w-4 text-[#737373]" />
             <span className="text-sm font-medium text-[#0a0a0a]">Profile</span>
-          </a>
+          </Link>
         </nav>
 
         {/* Footer Profile */}
